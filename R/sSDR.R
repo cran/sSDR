@@ -675,3 +675,44 @@ gSIR.comp.d<-function(X, y, groups, Gamma)
     ans<-list(d=d, crit=crit)
     return(ans)
 }
+
+#' Structured OLS (sOLS) outer level BIC criterion to estimate dimension with
+#' eigen-decomposition
+#'
+#' @param X A matrix containing directions estimated from all subpopulations.
+#' @param sizes A vector with the sample sizes of all subpopulation.
+#' @return sOLS.comp.d returns the dimension estimated across subpopulations.
+#' @details
+#' This function estimates dimension across the subpopulations using
+#' eigen-decomposition. The order of the subpopulations in the "sizes" vector
+#' should match the one in the "X" matrix.
+#' @references Liu, Y., Chiaromonte, F., and Li, B. (2015). Structured Ordinary
+#' Least Squares: a sufficient dimension reduction approach for regressions with
+#'  partitioned predictors and heterogeneous units. Submitted.
+#' @examples
+#' v1 <- c(1, 1, 0, 0)
+#' v2 <- c(0, 1, 1, 0)
+#' v3 <- c(0, 0, 1, 1)
+#' v4 <- c(1, 1, 1, 1)
+#' m1 <- cbind(v1, v2)
+#' sizes1 <- c(100, 200)
+#' sOLS.comp.d(m1, sizes1)
+#' m2 <- cbind(v1, v2, v3)
+#' sizes2 <- c(100, 200, 500)
+#' sOLS.comp.d(m2, sizes2)
+#' m3 <- cbind(v1, v3, v4)
+#' sizes3 <- c(100, 500, 1000)
+#' sOLS.comp.d(m3, sizes3)
+#' @export
+
+sOLS.comp.d<-function(X, sizes)
+{
+    MM <- X %*% t(X)
+    crit <- NULL
+    for (w in 1:min(dim(X))){
+        crit.d <- sum(eigen(MM)$values[1:w]) - w/(min(sizes)^(1/8))
+        crit<-c(crit, crit.d)
+    }
+    ans <- which(crit == max(crit))
+    return(ans)
+}

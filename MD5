@@ -1,6 +1,6 @@
-b93e234c344ae24796719da7fecc6c99 *DESCRIPTION
-f910d2995fcb7a94c712960cb1c629fb *NAMESPACE
-6484aba8ba376269c6857dafb733cfb7 *R/sSDR.R
+bf52ba1df0ddd566db170aba281c1ad9 *DESCRIPTION
+44613b795c9c2f1de511bcc604b0abbe *NAMESPACE
+e5648798edfc19decb981dc6c355b852 *R/sSDR.R
 942a22f94e9b5a544ba92c42b8cd5abf *man/center.Rd
 cff813fb0481b5dbfe9394429cfe3421 *man/cov.x.Rd
 e10a076678261e84ea58cb80e29af595 *man/disvm.Rd
@@ -12,4 +12,5 @@ efda719c13e101f8fca29bff0b8365c4 *man/gen.data.Rd
 387f41c4257e1a6a0bb9efd7da79a426 *man/matpower.Rd
 6b150f52da161a1e9d23f362aaf1dd1f *man/norm1.Rd
 8d44882c070d49a4d5951066c7eeeffe *man/orthnormal.Rd
+0edfccdeea19667731da082a46398a78 *man/sOLS.comp.d.Rd
 f59ab27a8641a6e7f4e4e22cd89b5bb1 *man/standmat.Rd
