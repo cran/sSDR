@@ -5,7 +5,7 @@
 \title{Groupwise SIR (gSIR) BIC criterion to estimate dimensions with
 eigen-decomposition (binary response)}
 \usage{
-gSIR.comp.d(X, y, groups, Gamma)
+gSIR.comp.d(X, y, groups)
 }
 \arguments{
 \item{X}{A covariate matrix of n observations and p predictors.}
@@ -13,8 +13,6 @@ gSIR.comp.d(X, y, groups, Gamma)
 \item{y}{A binary response.}
 
 \item{groups}{A vector with the number of predictors in each group.}
-
-\item{Gamma}{A p x p identity matrix.}
 }
 \value{
 gSIR.comp.d returns a list containning at least the following
@@ -38,8 +36,7 @@ data <- gen.data(n=1000, binary=TRUE) # generate data
 dim(data$X) # covariate matrix of 1000 observations and 15 predictors
 length(data$y) # univariate response
 groups <- c(5, 10) # two predictor groups and their numbers of predictors
-Gamma <- diag(sum(groups)) # identity matrix
-dim_gSIR<-gSIR.comp.d(data$X,data$y,groups,Gamma)
+dim_gSIR<-gSIR.comp.d(data$X,data$y,groups)
 names(dim_gSIR)
 }
 \references{

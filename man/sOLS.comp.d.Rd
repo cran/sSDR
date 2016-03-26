@@ -13,7 +13,10 @@ sOLS.comp.d(X, sizes)
 \item{sizes}{A vector with the sample sizes of all subpopulation.}
 }
 \value{
-sOLS.comp.d returns the dimension estimated across subpopulations.
+sOLS.comp.d returns a list containning at least the following
+components:
+"d", the dimension estimated across subpopulations;
+"u", the "d" linearly independent directions among the matrix X.
 }
 \description{
 Structured OLS (sOLS) outer level BIC criterion to estimate dimension with
@@ -22,7 +25,8 @@ eigen-decomposition
 \details{
 This function estimates dimension across the subpopulations using
 eigen-decomposition. The order of the subpopulations in the "sizes" vector
-should match the one in the "X" matrix.
+should match the one in the "X" matrix. Also, this function returns the
+linearly independent directions among all subpopulations.
 }
 \examples{
 v1 <- c(1, 1, 0, 0)

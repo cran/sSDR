@@ -4,7 +4,7 @@
 \alias{gOLS}
 \title{Groupwise OLS (gOLS)}
 \usage{
-gOLS(X, Y, groups, Gamma, dims, tol = 1e-05, maxiter = 100)
+gOLS(X, Y, groups, dims)
 }
 \arguments{
 \item{X}{A covariate matrix of n observations and p predictors.}
@@ -13,25 +13,13 @@ gOLS(X, Y, groups, Gamma, dims, tol = 1e-05, maxiter = 100)
 
 \item{groups}{A vector with the number of predictors in each group.}
 
-\item{Gamma}{A p x p identity matrix.}
-
 \item{dims}{A vector with the dimension (at most 1) for each predictor group.}
-
-\item{tol}{A tolerence factor in the convergence criterium.}
-
-\item{maxiter}{A maximum iteration number.}
 }
 \value{
 gOLS returns a list containning at least the following components:
-"b_init", the initial estimatied directions for each group with its own
-dimension using assembled OLS;
 "b_est", the estimated directions for each group with its own dimension
 using gOLS AFTER normalization;
-"B", the estimated directions for each group using gOLS BEFORE normalization;
-"t_est", the estimated p-dimensional directions for each group using gOLS
-AFTER normalization;
-"obj", the objective functions from each iteration;
-"niter", the number of iterations.
+"B", the estimated directions for each group using gOLS BEFORE normalization.
 }
 \description{
 Groupwise OLS (gOLS)
@@ -42,17 +30,14 @@ Predictors need to be organized in groups within the "X" matrix, as the
 same order saved in "groups". We only allow continuous covariates
 in the "X" matrix; while categorical covariates can be handled outside of
 gOLS, e.g. structured OLS.
-"b_est", "B", and "t_est" are basically the same estimation with different
-layouts and/or normalizations.
 }
 \examples{
 data <- gen.data(n=1000, binary=FALSE) # generate data
 dim(data$X) # covariate matrix of 1000 observations and 15 predictors
 dim(data$y) # univariate response
 groups <- c(5, 10) # two predictor groups and their numbers of predictors
-Gamma <- diag(sum(groups)) # identity matrix
 dims <- c(1,1) # dimension of each predictor group
-est_gOLS <- gOLS(data$X,data$y,groups,Gamma,dims,tol=1e-5,maxiter=100)
+est_gOLS <- gOLS(data$X,data$y,groups,dims)
 names(est_gOLS)
 }
 \references{

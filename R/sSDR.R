@@ -220,28 +220,17 @@ disvm = function(v1,v2){
 #' @param X A covariate matrix of n observations and p predictors.
 #' @param Y A univariate response.
 #' @param groups A vector with the number of predictors in each group.
-#' @param Gamma A p x p identity matrix.
 #' @param dims A vector with the dimension (at most 1) for each predictor group.
-#' @param tol A tolerence factor in the convergence criterium.
-#' @param maxiter A maximum iteration number.
 #' @return gOLS returns a list containning at least the following components:
-#' "b_init", the initial estimatied directions for each group with its own
-#' dimension using assembled OLS;
 #' "b_est", the estimated directions for each group with its own dimension
 #' using gOLS AFTER normalization;
-#' "B", the estimated directions for each group using gOLS BEFORE normalization;
-#' "t_est", the estimated p-dimensional directions for each group using gOLS
-#' AFTER normalization;
-#' "obj", the objective functions from each iteration;
-#' "niter", the number of iterations.
+#' "B", the estimated directions for each group using gOLS BEFORE normalization.
 #' @details
 #' This function estimates directions for each predictor group using gOLS.
 #' Predictors need to be organized in groups within the "X" matrix, as the
 #' same order saved in "groups". We only allow continuous covariates
 #' in the "X" matrix; while categorical covariates can be handled outside of
 #' gOLS, e.g. structured OLS.
-#' "b_est", "B", and "t_est" are basically the same estimation with different
-#' layouts and/or normalizations.
 #' @references Liu, Y., Chiaromonte, F., and Li, B. (2015). Structured Ordinary
 #' Least Squares: a sufficient dimension reduction approach for regressions with
 #'  partitioned predictors and heterogeneous units. Submitted.
@@ -250,120 +239,66 @@ disvm = function(v1,v2){
 #' dim(data$X) # covariate matrix of 1000 observations and 15 predictors
 #' dim(data$y) # univariate response
 #' groups <- c(5, 10) # two predictor groups and their numbers of predictors
-#' Gamma <- diag(sum(groups)) # identity matrix
 #' dims <- c(1,1) # dimension of each predictor group
-#' est_gOLS <- gOLS(data$X,data$y,groups,Gamma,dims,tol=1e-5,maxiter=100)
+#' est_gOLS <- gOLS(data$X,data$y,groups,dims)
 #' names(est_gOLS)
 #' @export
 #' @importFrom MASS ginv
 #' @importFrom Matrix bdiag
 #' @importFrom stats cov
 
-gOLS = function(X,Y,groups,Gamma,dims,tol=1e-5,maxiter=100){
-    #input :X, Y, groups, Gamma, dims, tol, maxiter
-    #output: b_est: estimated direction after gamma
-    #        t_est: estimated directions for each group
-    #        obj: objective functions from each iteration
-    #        niter: number of iterations
+gOLS = function(X,Y,groups,dims){
+    #input :X, Y, groups, dims
+    #output: b_est: estimated directions for each group
     X <- as.matrix(X)
     Y <- as.matrix(Y)
     n=nrow(X)
     p=ncol(X)
     ngroup=length(groups)
-    ggamma=NULL
-    #create a list of matrices store group information (gamma's)
+    groups1 <- groups[which(dims > 0)]
+
+    tmp=NULL
     for (g in 1:ngroup) {
         first=sum(groups[0:(g-1)])+1
         last=sum(groups[1:g])
-        tmp= Gamma[,first:last]
-        if (is.null(ncol(tmp))) tmp=matrix(tmp,nrow=p)
-        ggamma=c(ggamma,list(tmp))
+        if (dims[g] > 0) tmp=c(tmp, first:last)
+    }
+    X <- X[,tmp]
+
+    if (dim(X)[2] > 0){
+        #Center X, estimate Sigma_x, Center Y
+        Xc=apply(X,2,center)
+        Sigma_x=cov(Xc)/n*(n-1)
+        #   Sigma_inv=solve(Sigma_x)    #conventional inverse
+        Sigma_inv=ginv(Sigma_x)   #Moore-Penrose generalized inverse
+        Yc=apply(Y,2,center)
+
+        #Estimate U
+        U <- Sigma_inv %*% cov(Xc, Yc)
+        # U <- Sigma_inv %*% t(Xc) %*% Yc / n
     }
 
-    #Center X, estimate Sigma_x, Center Y
-    Xc=apply(X,2,center)
-    Sigma_x=cov(Xc)/n*(n-1)
-
-    #   Sigma_inv=solve(Sigma_x)    #conventional inverse
-    Sigma_inv=ginv(Sigma_x)   #Moore-Penrose generalized inverse
-
-    eig=eigen(Sigma_x)
-    Sigma_half=eig$vectors%*%diag(sqrt(round(eig$values,10)))%*%t(eig$vectors)
-    inveig=eigen(Sigma_inv)
-    Sigmainv_half=
-        inveig$vectors%*%diag(sqrt(round(inveig$values,10)))%*%t(inveig$vectors)
-
-    Yc=apply(Y,2,center)
-
-    #Estimate U and V
-    U <- Sigma_inv %*% cov(Xc, Yc)
-    # U <- Sigma_inv %*% t(Xc) %*% Yc / n
-    V <- Sigma_half %*% U
-
-    #Obtain initial estimator of (b1,...,bg)
-    b_init=NULL
+    #Obtain the estimator of (b1,...,bg)
+    b_est=NULL
+    gg=0
     for (g in 1:ngroup){
-        Xg=Xc%*%ggamma[[g]]
-        out.ols=ginv(t(Xg)%*%Xg)%*%t(Xg)%*%Yc
-        dg=dims[g]
-        bg_init=as.matrix(out.ols)
-        b_init=c(b_init,list(bg_init))
+        if (dims[g] > 0){
+            gg=gg+1
+            first=sum(groups1[0:(gg-1)])+1
+            last=sum(groups1[1:gg])
+            bg_est=as.matrix(U[first:last])
+            b_est=c(b_est,list(bg_est))
+        }
+        else{
+            bg_est=matrix(0, groups[g])
+            b_est=c(b_est,list(bg_est))
+        }
     }
-    b_est=b_init
-    #estimate B based on initial esimates
+
+    #estimate B based on the esimates
     B=b_est[[1]]
     if (ngroup>1) {
         for (g in 2:ngroup) { B=bdiag(B,b_est[[g]])}
-    }
-    obj_diff=1    #initial value for the difference of objective function
-    obj_rec=NULL  #recording the ojective function from each iteration
-    k=0
-
-    #start the iteration, until convergence criterions met
-    while (obj_diff>tol && k<maxiter) {
-        k=k+1
-        #Obtain estimate of C
-        #estimate A
-        A <- as.matrix(Sigma_half %*% B)
-        #esitmate C
-        C <- as.matrix(ginv(t(A)%*%A)%*%t(A)%*%V)
-
-        #estimate V2
-        V2=NULL
-        for (g in 1:ngroup) {
-            first=sum(dims[0:(g-1)])+1
-            last=sum(dims[1:g])
-            fgs=C[first:last,]
-            if (is.null(ncol(fgs))) fgs=matrix(fgs,ncol=1)
-            V2=cbind(V2, kronecker(t(fgs),Sigma_half%*%ggamma[[g]]))
-        }
-
-        #estimate b1,..bg
-        vec_b=as.matrix(ginv(t(V2)%*%V2)%*%t(V2)%*%V)
-
-        b_est=NULL
-        for (g in 1:ngroup){
-            pg=groups[g]
-            dg=dims[g]
-            first=sum((groups*dims)[0:(g-1)])+1
-            last=sum((groups*dims)[1:g])
-            vec_bg=vec_b[first:last]
-            bg_est=matrix(vec_bg,nrow=pg,ncol=dg,byrow=FALSE)
-            b_est=c(b_est,list(bg_est))
-        }
-
-        #update B matrix
-        B=b_est[[1]]
-        if (ngroup>1) {
-            for (g in 2:ngroup) { B=bdiag(B,b_est[[g]])}
-        }
-
-        #Calculate objective function
-        objfn=sum((Sigma_half%*%U-Sigma_half%*%Gamma%*%B%*%C)^2)
-        obj_rec=c(obj_rec,objfn)
-        if (k==1) {obj_diff=1} else {
-            obj_diff=abs(obj_rec[k-1]-objfn)
-        }
     }
 
     #orthnormal b_est
@@ -371,14 +306,7 @@ gOLS = function(X,Y,groups,Gamma,dims,tol=1e-5,maxiter=100){
         b_est[[g]]=orthnormal(b_est[[g]])
     }
 
-    #output the results
-    t_est=NULL
-    for ( g in 1:ngroup){
-        tg=ggamma[[g]]%*%b_est[[g]]
-        t_est=c(t_est,list(tg))
-    }
-
-    ans=list(b_init=b_init,b_est=b_est,t_est=t_est,obj=obj_rec,niter=k,B=B)
+    ans=list(b_est=b_est,B=B)
     return(ans)
 }
 
@@ -387,28 +315,17 @@ gOLS = function(X,Y,groups,Gamma,dims,tol=1e-5,maxiter=100){
 #' @param X A covariate matrix of n observations and p predictors.
 #' @param Y A binary response.
 #' @param groups A vector with the number of predictors in each group.
-#' @param Gamma A p x p identity matrix.
 #' @param dims A vector with the dimension (at most 1) for each predictor group.
-#' @param tol A tolerence factor in the convergence criterium.
-#' @param maxiter A maximum iteration number.
 #' @return gSIR returns a list containning at least the following components:
-#' "b_init", the initial estimatied directions for each group with its own
-#' dimension using assembled SIR;
 #' "b_est", the estimated directions for each group with its own dimension
 #' using gSIR AFTER normalization;
-#' "B", the estimated directions for each group using gSIR BEFORE normalization;
-#' "t_est", the estimated p-dimensional directions for each group using gSIR
-#' AFTER normalization;
-#' "obj", the objective functions from each iteration;
-#' "niter", the number of iterations.
+#' "B", the estimated directions for each group using gSIR BEFORE normalization.
 #' @details
 #' This function estimates directions for each predictor group using gSIR.
 #' Predictors need to be organized in groups within the "X" matrix, as the
 #' same order saved in "groups". We only allow continuous covariates
 #' in the "X" matrix; while categorical covariates can be handled outside of
 #' gSIR, e.g. structured SIR.
-#' "b_est", "B", and "t_est" are basically the same estimation with different
-#' layouts and/or normalizations.
 #' @references Guo, Z., Li, L., Lu, W., and Li, B. (2014). Groupwise dimension
 #' reduction via envelope method. Journal of the American Statistical
 #' Association, accepted.
@@ -417,125 +334,67 @@ gOLS = function(X,Y,groups,Gamma,dims,tol=1e-5,maxiter=100){
 #' dim(data$X) # covariate matrix of 1000 observations and 15 predictors
 #' length(data$y) # binary response
 #' groups <- c(5, 10) # two predictor groups and their numbers of predictors
-#' Gamma <- diag(sum(groups)) # identity matrix
 #' dims <- c(1,1) # dimension of each predictor group
-#' est_gSIR<-gSIR(data$X,data$y,groups,Gamma,dims,tol=1e-5,maxiter=100)
+#' est_gSIR<-gSIR(data$X,data$y,groups,dims)
 #' names(est_gSIR)
 #' @export
 #' @importFrom MASS ginv
 #' @importFrom Matrix bdiag
 #' @importFrom stats cov
 
-gSIR = function(X,Y,groups,Gamma,dims,tol=1e-5,maxiter=100){
-    #input :X, Y, groups, Gamma, dims, tol, maxiter
-    #output: b_est: estimated direction after gamma
-    #        t_est: estimated directions for each group
-    #        obj: objective functions from each iteration
-    #        niter: number of iterations
+gSIR = function(X,Y,groups,dims){
+    #input :X, Y, groups, dims
+    #output: b_est: estimated directions for each group
     X <- as.matrix(X)
     Y <- as.matrix(Y)
     n=nrow(X)
     p=ncol(X)
     ngroup=length(groups)
-    ggamma=NULL
-    #create a list of matrices store group information (gamma's)
+    groups1 <- groups[which(dims > 0)]
+
+    tmp=NULL
     for (g in 1:ngroup) {
         first=sum(groups[0:(g-1)])+1
         last=sum(groups[1:g])
-        tmp= Gamma[,first:last]
-        if (is.null(ncol(tmp))) tmp=matrix(tmp,nrow=p)
-        ggamma=c(ggamma,list(tmp))
+        if (dims[g] > 0) tmp=c(tmp, first:last)
+    }
+    X <- X[,tmp]
+
+    if (dim(X)[2] > 0){
+        #Center X, estimate Sigma_x
+        Xc=apply(X,2,center)
+        Sigma_x=cov(Xc)/n*(n-1)
+        #   Sigma_inv=solve(Sigma_x)    #conventional inverse
+        Sigma_inv=ginv(Sigma_x)   #Moore-Penrose generalized inverse
+        Yc <- as.factor(Y)
+        Y1 <- which(Yc == levels(Yc)[1])
+        Y2 <- which(Yc == levels(Yc)[2])
+
+        #Estimate U
+        U <- Sigma_inv %*% (apply(Xc[Y2,], 2, mean) - apply(Xc[Y1,], 2, mean))
     }
 
-    #Center X, estimate Sigma_x, Center Y
-    Xc=apply(X,2,center)
-    Yc <- as.factor(Y)
-    Y1 <- which(Yc == levels(Yc)[1])
-    Y2 <- which(Yc == levels(Yc)[2])
-
-    Sigma_x=cov(Xc)/n*(n-1)
-
-    #   Sigma_inv=solve(Sigma_x)    #conventional inverse
-    Sigma_inv=ginv(Sigma_x)   #Moore-Penrose generalized inverse
-
-    eig=eigen(Sigma_x)
-    Sigma_half=eig$vectors%*%diag(sqrt(round(eig$values,10)))%*%t(eig$vectors)
-    inveig=eigen(Sigma_inv)
-    Sigmainv_half=
-        inveig$vectors%*%diag(sqrt(round(inveig$values,10)))%*%t(inveig$vectors)
-
-    #Estimate U and V
-    U <- Sigma_inv %*% (apply(Xc[Y2,], 2, mean) - apply(Xc[Y1,], 2, mean))
-    #   U <- Sigma_inv %*% cov(Xc, Yc)
-    #   U <- Sigma_inv %*% t(Xc) %*% Yc / n
-    V <- Sigma_half %*% U
-
-    #Obtain initial estimator of (b1,...,bg)
-    b_init=NULL
+    #Obtain the estimator of (b1,...,bg)
+    b_est=NULL
+    gg=0
     for (g in 1:ngroup){
-        Xg=Xc%*%ggamma[[g]]
-        out.sir=
-            ginv(cov(Xg)/n*(n-1))%*%
-            (apply(Xg[Y2,], 2, mean) - apply(Xg[Y1,], 2, mean))
-        dg=dims[g]
-        bg_init=as.matrix(out.sir)
-        b_init=c(b_init,list(bg_init))
+        if (dims[g] > 0){
+            gg=gg+1
+            first=sum(groups1[0:(gg-1)])+1
+            last=sum(groups1[1:gg])
+            bg_est=as.matrix(U[first:last])
+            b_est=c(b_est,list(bg_est))
+        }
+        else{
+            bg_est=matrix(0, groups[g])
+            b_est=c(b_est,list(bg_est))
+        }
     }
-    b_est=b_init
-    #estimate B based on initial esimates
+
+    #estimate B based on the esimates
     B=b_est[[1]]
     if (ngroup>1) {
         for (g in 2:ngroup) { B=bdiag(B,b_est[[g]])}
-    }
-    obj_diff=1    #initial value for the difference of objective function
-    obj_rec=NULL  #recording the ojective function from each iteration
-    k=0
-
-    #start the iteration, until convergence criterions met
-    while (obj_diff>tol && k<maxiter) {
-        k=k+1
-        #Obtain estimate of C
-        #estimate A
-        A <- as.matrix(Sigma_half %*% B)
-        #esitmate C
-        C <- as.matrix(ginv(t(A)%*%A)%*%t(A)%*%V)
-
-        #estimate V2
-        V2=NULL
-        for (g in 1:ngroup) {
-            first=sum(dims[0:(g-1)])+1
-            last=sum(dims[1:g])
-            fgs=C[first:last,]
-            if (is.null(ncol(fgs))) fgs=matrix(fgs,ncol=1)
-            V2=cbind(V2, kronecker(t(fgs),Sigma_half%*%ggamma[[g]]))
-        }
-
-        #estimate b1,..bg
-        vec_b=as.matrix(ginv(t(V2)%*%V2)%*%t(V2)%*%V)
-
-        b_est=NULL
-        for (g in 1:ngroup){
-            pg=groups[g]
-            dg=dims[g]
-            first=sum((groups*dims)[0:(g-1)])+1
-            last=sum((groups*dims)[1:g])
-            vec_bg=vec_b[first:last]
-            bg_est=matrix(vec_bg,nrow=pg,ncol=dg,byrow=FALSE)
-            b_est=c(b_est,list(bg_est))
-        }
-
-        #update B matrix
-        B=b_est[[1]]
-        if (ngroup>1) {
-            for (g in 2:ngroup) { B=bdiag(B,b_est[[g]])}
-        }
-
-        #Calculate objective function
-        objfn=sum((Sigma_half%*%U-Sigma_half%*%Gamma%*%B%*%C)^2)
-        obj_rec=c(obj_rec,objfn)
-        if (k==1) {obj_diff=1} else {
-            obj_diff=abs(obj_rec[k-1]-objfn)
-        }
     }
 
     #orthnormal b_est
@@ -543,16 +402,10 @@ gSIR = function(X,Y,groups,Gamma,dims,tol=1e-5,maxiter=100){
         b_est[[g]]=orthnormal(b_est[[g]])
     }
 
-    #output the results
-    t_est=NULL
-    for ( g in 1:ngroup){
-        tg=ggamma[[g]]%*%b_est[[g]]
-        t_est=c(t_est,list(tg))
-    }
-
-    ans=list(b_init=b_init,b_est=b_est,t_est=t_est,obj=obj_rec,niter=k,B=B)
+    ans=list(b_est=b_est,B=B)
     return(ans)
 }
+
 
 #' Groupwise OLS (gOLS) BIC criterion to estimate dimensions with
 #' eigen-decomposition
@@ -560,7 +413,6 @@ gSIR = function(X,Y,groups,Gamma,dims,tol=1e-5,maxiter=100){
 #' @param X A covariate matrix of n observations and p predictors.
 #' @param y A univariate response.
 #' @param groups A vector with the number of predictors in each group.
-#' @param Gamma A p x p identity matrix.
 #' @return gOLS.comp.d returns a list containning at least the following
 #' components:
 #' "d", the estimated dimension (at most 1) for each predictor group;
@@ -579,14 +431,12 @@ gSIR = function(X,Y,groups,Gamma,dims,tol=1e-5,maxiter=100){
 #' dim(data$X) # covariate matrix of 1000 observations and 15 predictors
 #' dim(data$y) # univariate response
 #' groups <- c(5, 10) # two predictor groups and their numbers of predictors
-#' Gamma <- diag(sum(groups)) # identity matrix
-#' dim_gOLS<-gOLS.comp.d(data$X,data$y,groups,Gamma)
+#' dim_gOLS<-gOLS.comp.d(data$X,data$y,groups)
 #' names(dim_gOLS)
 #' @export
 #' @importFrom stats sd
 
-gOLS.comp.d<-function(X, y, groups, Gamma)
-{
+gOLS.comp.d<-function(X, y, groups){
     n<-nrow(X)
     ngrp<-length(groups)
 
@@ -595,7 +445,7 @@ gOLS.comp.d<-function(X, y, groups, Gamma)
 
     Z <- standmat(X)
     Y <- (y-mean(y))/sd(y)
-    out.d<-gOLS(Z,Y,groups,Gamma,dsw,tol=1e-6,maxiter=500)
+    out.d<-gOLS(Z,Y,groups,dsw)
 
     M <- t(as.matrix(out.d$B)) %*% (as.matrix(out.d$B))
     vecM <- diag(M)
@@ -621,7 +471,6 @@ gOLS.comp.d<-function(X, y, groups, Gamma)
 #' @param X A covariate matrix of n observations and p predictors.
 #' @param y A binary response.
 #' @param groups A vector with the number of predictors in each group.
-#' @param Gamma A p x p identity matrix.
 #' @return gSIR.comp.d returns a list containning at least the following
 #' components:
 #' "d", the estimated dimension (at most 1) for each predictor group;
@@ -641,12 +490,11 @@ gOLS.comp.d<-function(X, y, groups, Gamma)
 #' dim(data$X) # covariate matrix of 1000 observations and 15 predictors
 #' length(data$y) # univariate response
 #' groups <- c(5, 10) # two predictor groups and their numbers of predictors
-#' Gamma <- diag(sum(groups)) # identity matrix
-#' dim_gSIR<-gSIR.comp.d(data$X,data$y,groups,Gamma)
+#' dim_gSIR<-gSIR.comp.d(data$X,data$y,groups)
 #' names(dim_gSIR)
 #' @export
 
-gSIR.comp.d<-function(X, y, groups, Gamma)
+gSIR.comp.d<-function(X, y, groups)
 {
     n<-nrow(X)
     ngrp<-length(groups)
@@ -656,7 +504,7 @@ gSIR.comp.d<-function(X, y, groups, Gamma)
 
     Z <- standmat(X)
     Y <- y
-    out.d<-gSIR(Z,Y,groups,Gamma,dsw,tol=1e-6,maxiter=500)
+    out.d<-gSIR(Z,Y,groups,dsw)
 
     M <- t(as.matrix(out.d$B)) %*% (as.matrix(out.d$B))
     vecM <- diag(M)
@@ -681,11 +529,15 @@ gSIR.comp.d<-function(X, y, groups, Gamma)
 #'
 #' @param X A matrix containing directions estimated from all subpopulations.
 #' @param sizes A vector with the sample sizes of all subpopulation.
-#' @return sOLS.comp.d returns the dimension estimated across subpopulations.
+#' @return sOLS.comp.d returns a list containning at least the following
+#' components:
+#' "d", the dimension estimated across subpopulations;
+#' "u", the "d" linearly independent directions among the matrix X.
 #' @details
 #' This function estimates dimension across the subpopulations using
 #' eigen-decomposition. The order of the subpopulations in the "sizes" vector
-#' should match the one in the "X" matrix.
+#' should match the one in the "X" matrix. Also, this function returns the
+#' linearly independent directions among all subpopulations.
 #' @references Liu, Y., Chiaromonte, F., and Li, B. (2015). Structured Ordinary
 #' Least Squares: a sufficient dimension reduction approach for regressions with
 #'  partitioned predictors and heterogeneous units. Submitted.
@@ -713,6 +565,7 @@ sOLS.comp.d<-function(X, sizes)
         crit.d <- sum(eigen(MM)$values[1:w]) - w/(min(sizes)^(1/8))
         crit<-c(crit, crit.d)
     }
-    ans <- which(crit == max(crit))
+    d <- which(crit == max(crit))
+    ans<-list(d=d, u=svd(X)$u[,1:d])
     return(ans)
 }
